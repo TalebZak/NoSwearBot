@@ -106,7 +106,11 @@ async def on_ready():
 
 @bot.listen('on_message')
 async def delete_on_swear(message):
-    """This function tries to detect whether a message contains a bad word and deletes gthe message, then sends a warning to the message author"""
+    """This function tries to detect whether a message contains a bad word and deletes gthe message, then sends a warning to the message author
+        Args:
+            message: This is that the author sent and contains details like message's author, channel and other details that would help when working with the bot
+        Returns:
+            Doesn't have a return type"""
     if not message:
         return
     if message.content.lower().startswith(('!add', '!delete')):
