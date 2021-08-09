@@ -88,6 +88,6 @@ class DatabaseUtil:
         print(query.as_string(self.cursor))
         self.execute(query, values)
         return self.cursor.fetchall()
-    def getall(self, query):
 
-    def getone(self, query):
+
+
