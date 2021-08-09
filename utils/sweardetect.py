@@ -5,7 +5,7 @@ def preprocessing(substring):
             substring: A string that represents the needle that we will be looking for
        Return:
             pi_table: A list in which we mapped each letter in the substring and if it occured we give it its previous occurence otherwise it takes a 0 value"""
-    pi_table = [0]#the first value is 0 to facilitate the kmp process
+    pi_table = [('', 0)]#the first value is 0 to facilitate the kmp process
     first_occurrence = {}
     for i in range(len(substring)):
         letter = substring[i]
@@ -28,10 +28,11 @@ def is_substring(haystack, needle):
     if len(needle) > len(haystack):
         return False
     reference = preprocessing(needle)
+    print(reference)
     i = 0
     j = 0
     while i < len(haystack):
-        while j != 0:
+        while j != 0 and j<len(needle):
             letter_pair = reference[j + 1]
             if letter_pair[0] == haystack[i]:
                 j += 1
