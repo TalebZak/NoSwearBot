@@ -8,7 +8,7 @@ load_dotenv()
 class DatabaseUtil:
     def __init__(self):
         ENDPOINT = getenv('ENDPOINT')
-        PORT = getenv('PORT')
+        PORT = 5432
         USR = getenv('USR')
         PASS = getenv('PASS')
         DBNAME = getenv('DBNAME')
