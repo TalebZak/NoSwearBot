@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import discord
 from utils.sweardetect import is_substring
 from utils.DatabaseUtil import DatabaseUtil
+import asyncio
 
 intents = discord.Intents.all()
 db = DatabaseUtil()
@@ -15,24 +16,64 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 bot = commands.Bot(command_prefix='!', case_insensitive=True, intents=intents)
 
 
+async def add_member(member, guild):
+    if not db.exist_and("member", ["id"], (member.id,)):
+        db.insert("member", (member.id, member.name, member.bot,))
+        db.insert("membership", (member.id, guild.id))
+    else:
+        if not db.exist_and("membership", ["memberid", "guildid"], (member.id, guild.id)):
+            db.insert("membership", (member.id, guild.id))
+
+
 @bot.event
 async def on_guild_join(guild):
-    db.insert("guild", (guild.id, guild.name))
+    perms = discord.Permissions(send_messages=False, read_messages=True)
+    await guild.create_role(name='NoSend', permissions=perms)
+    if not db.exist_and("guild", ["id"], (guild.id,)):
+        db.insert("guild", (guild.id, guild.name))
     for member in guild.members:
-        if not db.exist_and("member", ["id"], (member.id,)):
-            db.insert("member", (member.id, member.name, member.bot,))
-            db.insert("membership", (member.id, guild.id))
-        else:
-            if not db.exist_and("membership", ["memberid", "guildid"], (member.id, guild.id)):
-                db.insert("membership", (member.id, guild.id))
+        await add_member(member, guild)
 
 
-async def punish(member_id, guild_id):
-    infrigement = db.get
-    db.set("membership", ("infrigement",), ("memberid", "guildid"), (current - 1,), (member_id, guild_id))
+@bot.event
+async def on_member_join(member):
+    await add_member(member, member.guild)
+
+
+@bot.event
+async def on_member_remove(member):
+    db.delete("membership", ["memberid", "guildid"], (member.id, member.guild.id))
+
+
+async def kick(member, reason="breaking the swearing limit"):
+    await member.kick(reason=reason)
+
+
+@bot.commands(description='sets the limits of member swearing until they get kicked[default 3]',
+              brief='sets the limits of member swearing')
+@commands.has_permissions(administrator=True)
+async def setlimit(ctx, limit=3):
+    db.set("guild", ("limits",), ("guildid",), (limit,), (ctx.guild.id,))
+
+
+async def punish(member, guild_id):
+    current_infrigement = db.get("membership", ("infrigement",), ("memberid", "guildid"), (member.id, guild_id))[0][0]
+    print(current_infrigement)
+    time = db.get("guild", ("silencepenalty",), ("id",), (guild_id,))[0]
+    db.set("membership", ("infrigement",), ("memberid", "guildid"), (current_infrigement + 1,), (member.id, guild_id))
+    limit = db.get("guild", ("limits",), ("id",), (guild_id,))[0]
+    if current_infrigement == limit:
+        await member.dm_channel.send(f'You have misbehaved and you will be kicked from this server')
+        await kick(member)
+    else:
+        await member.create_dm()
+        await member.dm_channel.send(
+            f'Hi {member}, you have {limit - current_infrigement} times left before getting kicked from this server'
+        )
 
 
 @bot.command(description='blacklists a word if it was not blacklisted already', brief='blacklists a word')
+@commands.has_permissions(administrator=True)
 async def add(ctx, word=None):
     """This function adds a word to the swears database
         Args:
@@ -48,15 +89,11 @@ async def add(ctx, word=None):
     # getting the guild's id from the context to allow mapping
     guild_id = ctx.guild.id
     # searches if the word that a user wants to add to avoid duplicates
-    '''query = '''"SELECT word FROM badwords WHERE guild_id=? AND word=?"'''
-    cursor.execute(query, (guild_id, word))
-    word_result = cursor.fetchone()
-    if word_result:
-        await ctx.send('this word already exists')
-    else:
-        # if the word doesn't exists it gets inserted into the database'''
-    db.insert("blacklist", (guild_id, word))
-    await ctx.send(f'{word} was added to the blacklist')
+    try:
+        db.insert("blacklist", (guild_id, word))
+        await ctx.send(f'{word} was added to the blacklist')
+    except Exception:
+        await ctx.send('word already exists')
 
 
 @bot.command(description='lists all the words that were blacklisted in the server', brief='lists all blacklisted words')
@@ -81,6 +118,7 @@ async def listwords(ctx):
 
 @bot.command(description='allows the creator of the server to remove a word from the blacklist',
              brief='removes a blacklisted word')
+@commands.has_permissions(administrator=True)
 async def delete(ctx, word=None):
     """A command that allows the admin to delete swear words and make users able to say it for any reasons. Only the owner has that privilege for one simple
        reason which is avoid any sort of undesired deletion of word that can make others feel uncomfortable
@@ -89,10 +127,10 @@ async def delete(ctx, word=None):
            word: the word to delete from the blacklist
        Returns:
             Doesn't have a return value"""
-    if ctx.author != ctx.guild.owner:
+    """if ctx.author != ctx.guild.owner:
         # in case the author of the command is not the same person as the guild owner
         await ctx.send("Only the server owners are allowed to change the blacklist")
-        return
+        return"""
     if not word:
         await ctx.send("Your command doesn't contain a word to delete")
         return
@@ -120,23 +158,20 @@ async def delete_on_swear(message):
             message: This is that the author sent and contains details like message's author, channel and other details that would help when working with the bot
         Returns:
             Doesn't have a return type"""
-    message.content = message.content.replace(' ', '')
     if not message:
         return
-    if message.content.lower().startswith(('!add', '!delete')):
+    message.content = message.content.replace(' ', '')
+    if message.content.lower().startswith(('!add', '!delete', '!listwords')):
         # checks whether the message is just a command
         return
-
     try:
         guild_id = message.guild.id
     except AttributeError:
         return
+
     # gets all the bad words from the guild's blacklist
     swears = [swear[0] for swear in db.get("blacklist", fields=("term",), conditions=("guildid",), values=(guild_id,))]
-    print(swears)
-    if not swears:
-        return
-    if bot.user == message.author:
+    if bot.user == message.author or message.author.bot:
         return
     for swearword in swears:
         # checks first whether the channel is NSFW(swearing is allowed there usually) then calls the is_substring
@@ -144,11 +179,7 @@ async def delete_on_swear(message):
         if not message.channel.is_nsfw() and is_substring(message.content.lower(), swearword):
             # deletes the message followed by a sending a message to the author
             await message.delete()
-            await message.author.create_dm()
-            await message.author.dm_channel.send(
-                f'Hi {message.author}, you sent a message containing the following word: {swearword}'
-            )
-            return
+            await punish(message.author, guild_id)
 
 
 # running the bot

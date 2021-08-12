@@ -28,7 +28,6 @@ def is_substring(haystack, needle):
     if len(needle) > len(haystack):
         return False
     reference = preprocessing(needle)
-    print(reference)
     i = 0
     j = 0
     while i < len(haystack):

@@ -1,4 +1,4 @@
-from psycopg2 import connect, sql
+from psycopg2 import connect, sql, errors
 from dotenv import load_dotenv
 from os import getenv
 
@@ -24,8 +24,12 @@ class DatabaseUtil:
         self.db.commit()
 
     def execute(self, query, params):
-        self.cursor.execute(query, params)
-        self.db.commit()
+        try:
+            self.cursor.execute(query, params)
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            raise e
 
     def exist_and(self, table, fields, values):
         query = sql.SQL("SELECT * FROM {table} WHERE {condition}").format(
@@ -33,7 +37,6 @@ class DatabaseUtil:
             condition=sql.SQL(" AND ").join(
                 sql.Composed(sql.Identifier(field) + sql.SQL(' = ') + sql.Placeholder() for field in fields))
         )
-        print(query.as_string(self.cursor))
         self.execute(query, values)
         return self.cursor.fetchone() is not None
 
@@ -42,32 +45,32 @@ class DatabaseUtil:
             table=sql.Identifier(table),
             placeholder=sql.SQL(', ').join([sql.Placeholder()] * len(values))
         )
-        print(query.as_string(self.cursor))
-        self.execute(query, values)
+        try:
+            self.execute(query, values)
+        except Exception as e:
+            raise e
 
     def delete(self, table, conditions, values):
         query = sql.SQL("DELETE FROM {table} WHERE{conditions}").format(
             table=sql.Identifier(table),
             conditions=sql.SQL(" AND ").join(
-                sql.Composed(sql.Identifier(conditions) + sql.SQL(' = ') + sql.Placeholder()
-                             for conditions in conditions)
+                sql.Composed(sql.Identifier(condition) + sql.SQL(' = ') + sql.Placeholder()
+                             for condition in conditions)
             )
         )
-        print(query.as_string(self.cursor))
         self.execute(query, values)
 
-    def set(self, table, fields, conditions, old_values, new_values):
+    def set(self, table, fields, conditions, new_values, conditions_values):
         query = sql.SQL("UPDATE {table} SET {fields} WHERE {conditions}").format(
             table=sql.Identifier(table),
             fields=sql.SQL(" , ").join(
-                sql.Composed(sql.Identifier(fields) + sql.SQL(' = ') + sql.Placeholder() for field in fields)),
+                sql.Composed(sql.Identifier(field) + sql.SQL(' = ') + sql.Placeholder() for field in fields)),
             conditions=sql.SQL(" AND ").join(
-                sql.Composed(sql.Identifier(conditions) + sql.SQL(' = ') + sql.Placeholder()
-                             for conditions in conditions)
+                sql.Composed(sql.Identifier(condition) + sql.SQL(' = ') + sql.Placeholder()
+                             for condition in conditions)
             )
         )
-        print(query.as_string(self.cursor))
-        self.execute(query, new_values+old_values)
+        self.execute(query, new_values + conditions_values)
 
     def get(self, table, fields=None, conditions=None, values=None):
         if values is None:
@@ -85,9 +88,5 @@ class DatabaseUtil:
                              for conditions in conditions)
             )
         )
-        print(query.as_string(self.cursor))
         self.execute(query, values)
         return self.cursor.fetchall()
-
-
-
