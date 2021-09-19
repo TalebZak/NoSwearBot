@@ -26,7 +26,7 @@ Owners are able to delete blacklisted expressions as well and users can view the
 
 - [Repo](https://github.com/TalebZak/NoSwearBot/ "NoSwearBot Repo")
 
-- [Add to your service through this link](https://discord.com/api/oauth2/authorize?client_id=756954513256087722&permissions=8&scope=bot "NoSwearBot Libe")
+- [Add to your server through this link](https://discord.com/api/oauth2/authorize?client_id=756954513256087722&permissions=8&scope=bot "NoSwearBot Libe")
 
 ## Built With
 
